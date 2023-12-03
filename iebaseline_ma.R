@@ -60,7 +60,7 @@ getresults_VEST <- function(cycle, doi, varname_county, varname_precinct) {
 # — functions to create match keys----
 #### #### #### #### #### #### #### ###
 
-# function to create block/precincts keys from VEST (2016, 2018, 2020)
+# function to create block/precinct keys from VEST (2016, 2018, 2020)
 getkey_VEST <- function(x_blockassignments) {
   key <- x_blockassignments %>%
     mutate(countyprecinct = as.factor((paste(str_remove(as.character(COUNTY), "^0+"), str_remove(as.character((PRECINCT)), "^0+"))))) %>%
@@ -138,7 +138,7 @@ getkey_MIT2022 <- function(x_results) {
            precinctshare_rep = ifelse(problematic == "ISSUE R", precinctshare_dem, ifelse(problematic == "ISSUE TOTAL", 0.5, precinctshare_rep)),
            precinctshare_total = ifelse(problematic == "ISSUE TOTAL", 0.5, precinctshare_total)) %>%
     select(-problematic)
-  # add together to make a key
+  # bind together to make a key
   rbind(
     x_results %>%
       mutate(countyprecinct = paste(county_name, precinct)) %>%
@@ -286,7 +286,7 @@ cleanresults_bycd <- function (x_results, pick_yyyy, pick_office) {
            dem_margin = percent_dem - percent_rep)
 }
 
-# function to calculate Baseline scores by cd
+# function to calculate Baseline scores by congressional district
 baseline_cd <- function (x, year_start, year_end, trim) {
   x %>%
     filter(cycle >= year_start & cycle <= year_end) %>%
@@ -318,7 +318,7 @@ results_2022 <- read.csv(unz(temp, "ma22_cleaned.csv"))
 unlink(temp)
 
 
-# create keys that match census blocks into precincts
+# create keys to match census blocks into precincts into districts
 key_2016 <- getkey_VEST(read.csv("block_assignment_files/match_block_precinct_2016.csv", header=TRUE))
 
 key_2018 <- getkey_VEST(read.csv("block_assignment_files/match_block_precinct_2018.csv", header=TRUE))
@@ -328,7 +328,7 @@ key_2020 <- getkey_VEST(read.csv("block_assignment_files/match_block_precinct_20
 key_2022 <- getkey_MIT2022(results_2022)
 
 
-# clean precinct data for all years and offices
+# clean and bind precinct data for each election across all years and offices
 by_precinct <- rbind(cleanresults_VEST(results_2016, key_2016, "G16PRE", TOWN, WP_NAME, 2016, "President"),
                      cleanresults_VEST(results_2018, key_2018, "G18USS", TOWN, WP_NAME, 2018, "U.S. Senate"),
                      cleanresults_VEST(results_2018, key_2018, "G18GOV", TOWN, WP_NAME, 2018, "Governor"),
@@ -344,7 +344,7 @@ by_precinct <- rbind(cleanresults_VEST(results_2016, key_2016, "G16PRE", TOWN, W
                      cleanresults_MIT(results_2022, key_2022, 2022, "Auditor", c("DIANA DIZOGLIO", "ANTHONY AMORE", "GLORIA A CABALLERO-ROCA", "DANIEL WERNER RIEK", "DOMINIC GIANNONE III")))
 
 
-# aggregate results by congressional district for all races
+# aggregate results by congressional district for all elections
 by_cd <- cleanresults_bycd(by_precinct)
 
 # compute baseline (absent from here, the official calculation also includes 2022 House results)
