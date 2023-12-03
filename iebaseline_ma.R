@@ -60,7 +60,7 @@ getresults_VEST <- function(cycle, doi, varname_county, varname_precinct) {
 
 
 #### #### #### #### #### #### #### ###
-#— functions to create match keys-----
+# — functions to create match keys----
 #### #### #### #### #### #### #### ###
 
 # function to create block/precincts keys from VEST (2016, 2018, 2020)
@@ -160,7 +160,7 @@ getkey_MIT2022 <- function(x_results) {
 
 
 #### #### #### #### #### #### #### ###
-#— functions to tidy precinct data----
+#—  functions to tidy precincts-------
 #### #### #### #### #### #### #### ###
 
 # function to clean precinct data from VEST (2016, 2018, 2020)
@@ -270,7 +270,7 @@ cleanresults_MIT <- function(x_results, x_key, pick_yyyy, pick_office, pick_cand
 
 
 #### #### #### #### #### #### #### ###
-#— functions to aggregate data--------
+# — functions to aggregate data-------
 #### #### #### #### #### #### #### ###
 
 # function to sum precinct data up to the congressional district level
