@@ -307,7 +307,7 @@ baseline_cd <- function (x, year_start, year_end, trim) {
 
 
 #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ###
-# | collect and clean precinct results--------------------------------------------------
+# | collect, clean, and aggregate precinct results--------------------------------------
 #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ###
 
 # read in election results: VEST (2016, 2018, 2020); MIT (2022)
