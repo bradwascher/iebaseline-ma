@@ -335,18 +335,18 @@ key_2022 <- getkey_MIT2022(results_2022)
 
 # clean precinct data for all years and offices
 by_precinct <- rbind(cleanresults_VEST(results_2016, key_2016, "G16PRE", TOWN, WP_NAME, 2016, "President"),
-                        cleanresults_VEST(results_2018, key_2018, "G18USS", TOWN, WP_NAME, 2018, "U.S. Senate"),
-                        cleanresults_VEST(results_2018, key_2018, "G18GOV", TOWN, WP_NAME, 2018, "Governor"),
-                        cleanresults_VEST(results_2018, key_2018, "G18ATG", TOWN, WP_NAME, 2018, "Attorney General"),
-                        cleanresults_VEST(results_2018, key_2018, "G18SOC", TOWN, WP_NAME, 2018, "Secretary of the Commonwealth"),
-                        cleanresults_VEST(results_2018, key_2018, "G18TRE", TOWN, WP_NAME, 2018, "Treasurer"),
-                        cleanresults_VEST(results_2018, key_2018, "G18AUD", TOWN, WP_NAME, 2018, "Auditor"),
-                        cleanresults_VEST(results_2020, key_2020, "G20PRE", TOWN, WP_NAME, 2020, "President"),
-                        cleanresults_VEST(results_2020, key_2020, "G20USS", TOWN, WP_NAME, 2020, "U.S. Senate"),
-                        cleanresults_MIT(results_2022, key_2022, 2022, "Governor", c("HEALEY", "DIEHL", "REED")),
-                        cleanresults_MIT(results_2022, key_2022, 2022, "Attorney General", c("ANDREA JOY CAMPBELL", "JAMES R MCMAHON III")),
-                        cleanresults_MIT(results_2022, key_2022, 2022, "Secretary of State", c("WILLIAM FRANCIS GALVIN", "RAYLA CAMPBELL", "JUAN SANCHEZ")) %>% mutate(office = str_replace(office, "State", "the Commonwealth")),
-                        cleanresults_MIT(results_2022, key_2022, 2022, "Auditor", c("DIANA DIZOGLIO", "ANTHONY AMORE", "GLORIA A CABALLERO-ROCA", "DANIEL WERNER RIEK", "DOMINIC GIANNONE III")))
+                     cleanresults_VEST(results_2018, key_2018, "G18USS", TOWN, WP_NAME, 2018, "U.S. Senate"),
+                     cleanresults_VEST(results_2018, key_2018, "G18GOV", TOWN, WP_NAME, 2018, "Governor"),
+                     cleanresults_VEST(results_2018, key_2018, "G18ATG", TOWN, WP_NAME, 2018, "Attorney General"),
+                     cleanresults_VEST(results_2018, key_2018, "G18SOC", TOWN, WP_NAME, 2018, "Secretary of the Commonwealth"),
+                     cleanresults_VEST(results_2018, key_2018, "G18TRE", TOWN, WP_NAME, 2018, "Treasurer"),
+                     cleanresults_VEST(results_2018, key_2018, "G18AUD", TOWN, WP_NAME, 2018, "Auditor"),
+                     cleanresults_VEST(results_2020, key_2020, "G20PRE", TOWN, WP_NAME, 2020, "President"),
+                     cleanresults_VEST(results_2020, key_2020, "G20USS", TOWN, WP_NAME, 2020, "U.S. Senate"),
+                     cleanresults_MIT(results_2022, key_2022, 2022, "Governor", c("HEALEY", "DIEHL", "REED")),
+                     cleanresults_MIT(results_2022, key_2022, 2022, "Attorney General", c("ANDREA JOY CAMPBELL", "JAMES R MCMAHON III")),
+                     cleanresults_MIT(results_2022, key_2022, 2022, "Secretary of State", c("WILLIAM FRANCIS GALVIN", "RAYLA CAMPBELL", "JUAN SANCHEZ")) %>% mutate(office = str_replace(office, "State", "the Commonwealth")),
+                     cleanresults_MIT(results_2022, key_2022, 2022, "Auditor", c("DIANA DIZOGLIO", "ANTHONY AMORE", "GLORIA A CABALLERO-ROCA", "DANIEL WERNER RIEK", "DOMINIC GIANNONE III")))
 
 
 # aggregate results by congressional district for all races
