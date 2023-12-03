@@ -1,23 +1,23 @@
 #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ###
 # | setup and startup-------------------------------------------------------------------
 #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ###
-  
+
 #### #### #### #### #### #### #### ###
 # — about-----------------------------
 #### #### #### #### #### #### #### ###
-  
+
 # This script calculates by congressional district the results of every federal and statewide election in Oregon between 2016 and 2022.
 # The 2016-2020 calculations were used in an article analyzing the electoral competitiveness of the map:
 # https://www.insideelections.com/news/article/oregon-redistricting-mostly-good-news-for-democrats
-  
+
 
 # data and sources:
 # U.S. Census Bureau: https://www.census.gov/cgi-bin/geo/shapefiles/index.php?year=2020&layergroup=Blocks+%282020%29
 # Oregon Secretary of State: https://sos.oregon.gov/elections/Pages/electionhistory-stats.aspx
 # Voting and Election Science Team: https://dataverse.harvard.edu/dataverse/electionscience
 # OpenElections: https://github.com/openelections/openelections-data-or
-  
-  
+
+
 # libraries 
 { 
   library(tidyverse) # install.packages("tidyverse")
@@ -28,7 +28,7 @@
   library(modeest)   # install.packages("modeest")
 }
 
-  
+
 # useful settings
 options(scipen = 999) # ensures precinct names don't get converted to scientific notation 
 Sys.setenv("DATAVERSE_SERVER" = "dataverse.harvard.edu") # VEST files are hosted on the Dataverse
@@ -69,7 +69,7 @@ getkey_VEST <- function(x_blockassignments) {
     mutate(countyprecinct = as.factor((paste(str_remove(as.character(COUNTY), "^0+"), str_remove(as.character((PRECINCT)), "^0+"))))) %>%
     select(censusblock = GEOID20, countyprecinct) %>%
     distinct %>%
-    merge(read.csv("block-assignments.csv", header=TRUE) %>% rename(censusblock = 1, cd = 2), by = "censusblock") %>%
+    merge(read.csv("block_assignment_files/match_block_district_all.csv", header=TRUE) %>% rename(censusblock = 1, cd = 2), by = "censusblock") %>%
     distinct(countyprecinct, cd)
   key %>%
     merge(as.data.frame(table(key$countyprecinct)) %>% rename(countyprecinct = Var1) %>% arrange(countyprecinct), by = "countyprecinct") %>%
@@ -92,7 +92,7 @@ getkey_MIT2022 <- function(x_results) {
     select(countyprecinct, cd = district, office, party_simplified, candidate, votes) %>%
     mutate(party_recode = ifelse(party_simplified %in% "", candidate, party_simplified),
            party = ifelse(party_recode == "DEMOCRAT", "votes_dem",
-                   ifelse(party_recode == "REPUBLICAN", "votes_rep", "votes_other"))) %>%
+                          ifelse(party_recode == "REPUBLICAN", "votes_rep", "votes_other"))) %>%
     replace(is.na(.), "votes_other") %>%
     select(countyprecinct, cd, office, party, votes) %>%
     group_by(countyprecinct, cd, office, party) %>%
@@ -130,11 +130,11 @@ getkey_MIT2022 <- function(x_results) {
               total_total = sum(precinctshare_total)) %>%
     filter(total_dem < 1 | total_rep < 1 | total_total < 1) %>%
     mutate(problematic = ifelse(total_total < 1, "ISSUE TOTAL",
-                         ifelse(total_dem < 1 & total_total < 1, "ISSUE TOTAL",       
-                         ifelse(total_rep < 1 & total_total < 1, "ISSUE TOTAL",       
-                         ifelse(total_rep < 1 & total_rep < 1, "ISSUE TOTAL",
-                         ifelse(total_dem < 1, "ISSUE D",
-                         ifelse(total_rep < 1, "ISSUE R", NA))))))) %>%
+                                ifelse(total_dem < 1 & total_total < 1, "ISSUE TOTAL",       
+                                       ifelse(total_rep < 1 & total_total < 1, "ISSUE TOTAL",       
+                                              ifelse(total_rep < 1 & total_rep < 1, "ISSUE TOTAL",
+                                                     ifelse(total_dem < 1, "ISSUE D",
+                                                            ifelse(total_rep < 1, "ISSUE R", NA))))))) %>%
     select(countyprecinct, problematic) %>%
     merge(precincts_split) %>%
     mutate(precinctshare_dem = ifelse(problematic == "ISSUE D", precinctshare_rep, ifelse(problematic == "ISSUE TOTAL", 0.5, precinctshare_dem)),
@@ -143,18 +143,18 @@ getkey_MIT2022 <- function(x_results) {
     select(-problematic)
   # add together to make a key
   rbind(
-        x_results %>%
-          mutate(countyprecinct = paste(county_name, precinct)) %>%
-          filter(office == "US HOUSE" | office == "REPRESENTATIVE IN CONGRESS", precinct != "COUNTY TOTAL") %>%
-          select(countyprecinct, cd = district) %>% distinct %>%
-          filter(!(countyprecinct %in% precincts_split$countyprecinct)) %>%
-          mutate(cd = as.numeric(cd),
-                 split = 0,
-                 precinctshare_dem = 1, 
-                 precinctshare_rep = 1,
-                 precinctshare_total = 1),
-        precincts_split %>% filter(!(countyprecinct %in% precincts_problematic$countyprecinct)),
-        precincts_problematic) %>%
+    x_results %>%
+      mutate(countyprecinct = paste(county_name, precinct)) %>%
+      filter(office == "US HOUSE" | office == "REPRESENTATIVE IN CONGRESS", precinct != "COUNTY TOTAL") %>%
+      select(countyprecinct, cd = district) %>% distinct %>%
+      filter(!(countyprecinct %in% precincts_split$countyprecinct)) %>%
+      mutate(cd = as.numeric(cd),
+             split = 0,
+             precinctshare_dem = 1, 
+             precinctshare_rep = 1,
+             precinctshare_total = 1),
+    precincts_split %>% filter(!(countyprecinct %in% precincts_problematic$countyprecinct)),
+    precincts_problematic) %>%
     arrange(countyprecinct)
 }
 
@@ -322,11 +322,11 @@ unlink(temp)
 
 
 # create keys that match census blocks into precincts
-key_2016 <- getkey_VEST(read.csv("Match Block Precinct 2016.csv", header=TRUE))
+key_2016 <- getkey_VEST(read.csv("block_assignment_files/match_block_precinct_2016.csv", header=TRUE))
 
-key_2018 <- getkey_VEST(read.csv("Match Block Precinct 2018.csv", header=TRUE))
+key_2018 <- getkey_VEST(read.csv("block_assignment_files/match_block_precinct_2018.csv", header=TRUE))
 
-key_2020 <- getkey_VEST(read.csv("Match Block Precinct 2020.csv", header=TRUE))
+key_2020 <- getkey_VEST(read.csv("block_assignment_files/match_block_precinct_2020.csv", header=TRUE))
 
 key_2022 <- getkey_MIT2022(results_2022)
 
