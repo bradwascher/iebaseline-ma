@@ -24,8 +24,6 @@
   library(tidyverse) # install.packages("tidyverse")
   library(dataverse) # install.packages("dataverse")
   library(sf)        # install.packages("sf")
-  library(openxlsx)  # install.packages("openxlsx")
-  library(gsheet)    # install.packages("gsheet")
   library(modeest)   # install.packages("modeest")
 }
 
