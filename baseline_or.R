@@ -12,10 +12,11 @@
 
 
 # data and sources:
-# U.S. Census Bureau: https://www.census.gov/cgi-bin/geo/shapefiles/index.php?year=2020&layergroup=Blocks+%282020%29
-# Massachusetts Secretary of the Commonwealth: https://electionstats.state.ma.us/
-# Voting and Election Science Team: https://dataverse.harvard.edu/dataverse/electionscience
-# OpenElections: https://github.com/openelections/openelections-data-or
+# U.S. Census Bureau: census.gov/cgi-bin/geo/shapefiles/index.php?year=2020&layergroup=Blocks+%282020%29
+# Massachusetts Secretary of the Commonwealth: electionstats.state.ma.us
+# Voting and Election Science Team: dataverse.harvard.edu/dataverse/electionscience
+# MIT Election Lab: github.com/MEDSL/2022-elections-official/blob/main/individual_states/2022-ma-local-precinct-general.zip
+
 
 
 # libraries 
@@ -131,11 +132,11 @@ getkey_MIT2022 <- function(x_results) {
               total_total = sum(precinctshare_total)) %>%
     filter(total_dem < 1 | total_rep < 1 | total_total < 1) %>%
     mutate(problematic = ifelse(total_total < 1, "ISSUE TOTAL",
-                                ifelse(total_dem < 1 & total_total < 1, "ISSUE TOTAL",       
-                                       ifelse(total_rep < 1 & total_total < 1, "ISSUE TOTAL",       
-                                              ifelse(total_rep < 1 & total_rep < 1, "ISSUE TOTAL",
-                                                     ifelse(total_dem < 1, "ISSUE D",
-                                                            ifelse(total_rep < 1, "ISSUE R", NA))))))) %>%
+                         ifelse(total_dem < 1 & total_total < 1, "ISSUE TOTAL",       
+                         ifelse(total_rep < 1 & total_total < 1, "ISSUE TOTAL",       
+                         ifelse(total_rep < 1 & total_rep < 1, "ISSUE TOTAL",
+                         ifelse(total_dem < 1, "ISSUE D",
+                         ifelse(total_rep < 1, "ISSUE R", NA))))))) %>%
     select(countyprecinct, problematic) %>%
     merge(precincts_split) %>%
     mutate(precinctshare_dem = ifelse(problematic == "ISSUE D", precinctshare_rep, ifelse(problematic == "ISSUE TOTAL", 0.5, precinctshare_dem)),
@@ -221,7 +222,7 @@ cleanresults_MIT <- function(x_results, x_key, pick_yyyy, pick_office, pick_cand
            votes = str_replace(votes, "\\*", "0"),
            votes = as.numeric(votes),
            party = ifelse(candidate == pick_candidates[1], "votes_dem",
-                          ifelse(candidate == pick_candidates[2], "votes_rep", "votes_other"))) %>%
+                   ifelse(candidate == pick_candidates[2], "votes_rep", "votes_other"))) %>%
     select(countyprecinct, county_name, precinct, party, votes) %>%
     group_by(countyprecinct, county_name, precinct, party) %>% # pivot results to long tidy format 
     summarize(votes = sum(votes)) %>%
@@ -242,9 +243,9 @@ cleanresults_MIT <- function(x_results, x_key, pick_yyyy, pick_office, pick_cand
            votes_rep_adj = votes_rep * precinctshare_rep,
            votes_total_adj = votes_total * precinctshare_total) %>%
     mutate(problematic = ifelse(votes_total_adj >= votes_dem_adj + votes_rep_adj, FALSE,
-                                ifelse(votes_total_adj < votes_dem_adj + votes_rep_adj, TRUE, NA))) %>%
+                         ifelse(votes_total_adj < votes_dem_adj + votes_rep_adj, TRUE, NA))) %>%
     mutate(votes_total_scaled = ifelse(votes_total_adj >= votes_dem_adj + votes_rep_adj, votes_total_adj,
-                                       ifelse(votes_total_adj < votes_dem_adj + votes_rep_adj, votes_dem_adj + votes_rep_adj, NA)))
+                                ifelse(votes_total_adj < votes_dem_adj + votes_rep_adj, votes_dem_adj + votes_rep_adj, NA)))
   precincts_split <- merge(precincts_split,
                            precincts_split %>%
                              select(countyprecinct, county, precinct, votes_total_scaled) %>%
