@@ -3,7 +3,8 @@
 #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ###
 
 # about
-# This script calculates by congressional district the results of every federal and statewide election in Massachusetts between 2016 and 2022.
+# This script calculates by congressional district the results
+# of every federal and statewide election in Massachusetts between 2016 and 2022.
 # The 2016-2020 calculations were used in an article analyzing the electoral competitiveness of the map:
 # insideelections.com/news/article/massachusetts-redistricting-a-common-story-in-the-commonwealth
 
