@@ -47,11 +47,11 @@ pick_state = "OR"
 
 # function to download results from VEST via Dataverse (2016, 2018, 2020)
 getresults_VEST <- function(cycle, doi, varname_county, varname_precinct) {
-  #get_file(paste0(tolower(pick_state),"_",cycle,".zip"), paste0("doi:",doi)) %>% writeBin(paste0(tolower(pick_state),"_",cycle,".zip"))
-  #unzip(paste0(tolower(pick_state),"_",cycle,".zip"), exdir = paste0("shapefile_",cycle))
-  #unlink(paste0(tolower(pick_state),"_",cycle,".zip"))
+  get_file(paste0(tolower(pick_state),"_",cycle,".zip"), paste0("doi:",doi)) %>% writeBin(paste0(tolower(pick_state),"_",cycle,".zip"))
+  unzip(paste0(tolower(pick_state),"_",cycle,".zip"), exdir = paste0("shapefiles/shapefile_",cycle))
+  unlink(paste0(tolower(pick_state),"_",cycle,".zip"))
   
-  shapefile <- rgdal::readOGR(dsn = paste0("shapefile_",cycle),
+  shapefile <- rgdal::readOGR(dsn = paste0("shapefiles/shapefile_",cycle),
                               layer = paste0(tolower(pick_state),"_",cycle))
   results <- shapefile@data %>% mutate(county = str_remove({{varname_county}}, "^0+"),
                                        precinct = str_remove({{varname_precinct}}, "^0+"),
