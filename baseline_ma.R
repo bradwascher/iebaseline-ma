@@ -352,6 +352,5 @@ by_precinct <- rbind(cleanresults_VEST(results_2016, key_2016, "G16PRE", TOWN, W
 # aggregate results by congressional district for all races
 by_cd <- cleanresults_bycd(by_precinct)
 
-
 # compute baseline by congressional district
 baseline22_cd <- baseline_cd(by_cd, 2016, 2022, 1)
