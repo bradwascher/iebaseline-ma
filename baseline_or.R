@@ -6,14 +6,14 @@
 # — about-----------------------------
 #### #### #### #### #### #### #### ###
 
-# This script calculates by congressional district the results of every federal and statewide election in Oregon between 2016 and 2022.
+# This script calculates by congressional district the results of every federal and statewide election in Massachusetts between 2016 and 2022.
 # The 2016-2020 calculations were used in an article analyzing the electoral competitiveness of the map:
-# https://www.insideelections.com/news/article/oregon-redistricting-mostly-good-news-for-democrats
+# https://www.insideelections.com/news/article/massachusetts-redistricting-a-common-story-in-the-commonwealth
 
 
 # data and sources:
 # U.S. Census Bureau: https://www.census.gov/cgi-bin/geo/shapefiles/index.php?year=2020&layergroup=Blocks+%282020%29
-# Oregon Secretary of State: https://sos.oregon.gov/elections/Pages/electionhistory-stats.aspx
+# Massachusetts Secretary of the Commonwealth: https://electionstats.state.ma.us/
 # Voting and Election Science Team: https://dataverse.harvard.edu/dataverse/electionscience
 # OpenElections: https://github.com/openelections/openelections-data-or
 
@@ -30,9 +30,10 @@
 
 
 # useful settings
+pick_state = "MA"
+
 options(scipen = 999) # ensures precinct names don't get converted to scientific notation 
 Sys.setenv("DATAVERSE_SERVER" = "dataverse.harvard.edu") # VEST files are hosted on the Dataverse
-pick_state = "OR"
 
 
 
@@ -309,15 +310,15 @@ baseline_cd <- function (x, year_start, year_end, trim) {
 #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ###
 
 # read in election results: VEST (2016, 2018, 2020); MIT (2022)
-results_2016 <- getresults_VEST(cycle = 2016, doi = "10.7910/DVN/NH5S2I", COUNTY, PRECINCT)
+results_2016 <- getresults_VEST(cycle = 2016, doi = "10.7910/DVN/NH5S2I", TOWN, WP_NAME)
 
-results_2018 <- getresults_VEST(cycle = 2018, doi = "10.7910/DVN/UBKYRU", COUNTY, PRECINCT)
+results_2018 <- getresults_VEST(cycle = 2018, doi = "10.7910/DVN/UBKYRU", TOWN, WP_NAME)
 
-results_2020 <- getresults_VEST(cycle = 2020, doi = "10.7910/DVN/K7760H", COUNTY, PRECINCT)
+results_2020 <- getresults_VEST(cycle = 2020, doi = "10.7910/DVN/K7760H", TOWN, WP_NAME)
 
 temp <- tempfile()
-download.file("https://github.com/MEDSL/2022-elections-official/raw/main/individual_states/2022-or-local-precinct-general.zip", temp)
-results_2022 <- read_csv(unz(temp, "or22_clean.csv"))
+download.file("https://github.com/MEDSL/2022-elections-official/raw/main/individual_states/2022-ma-local-precinct-general.zip", temp)
+results_2022 <- read.csv(unz(temp, "ma22_cleaned.csv"))
 unlink(temp)
 
 
@@ -332,25 +333,24 @@ key_2022 <- getkey_MIT2022(results_2022)
 
 
 # clean precinct data for all years and offices
-by_precinct_or <- rbind(cleanresults_VEST(results_2016, key_2016, "G16PRE", COUNTY, PRECINCT, 2016, "President"),
-                        cleanresults_VEST(results_2016, key_2016, "G16USS", COUNTY, PRECINCT, 2016, "U.S. Senate"),
-                        cleanresults_VEST(results_2016, key_2016, "G16GOV", COUNTY, PRECINCT, 2016, "Governor (Special)"),
-                        cleanresults_VEST(results_2016, key_2016, "G16ATG", COUNTY, PRECINCT, 2016, "Attorney General"),
-                        cleanresults_VEST(results_2016, key_2016, "G16SOS", COUNTY, PRECINCT, 2016, "Secretary of State"),
-                        cleanresults_VEST(results_2016, key_2016, "G16TRE", COUNTY, PRECINCT, 2016, "Treasurer"),
-                        cleanresults_VEST(results_2018, key_2018, "G18GOV", COUNTY, PRECINCT, 2018, "Governor"),
-                        cleanresults_VEST(results_2020, key_2020, "G20PRE", COUNTY, PRECINCT, 2020, "President"),
-                        cleanresults_VEST(results_2020, key_2020, "G20USS", COUNTY, PRECINCT, 2020, "U.S. Senate"),
-                        cleanresults_VEST(results_2020, key_2020, "G20ATG", COUNTY, PRECINCT, 2020, "Attorney General"),
-                        cleanresults_VEST(results_2020, key_2020, "G20SOS", COUNTY, PRECINCT, 2020, "Secretary of State"),
-                        cleanresults_VEST(results_2020, key_2020, "G20TRE", COUNTY, PRECINCT, 2020, "Treasurer"),
-                        cleanresults_MIT(results_2022, key_2022, 2022, "U.S. Senate", c("RON WYDEN", "JO RAE PERKINS", "CHRIS HENRY", "DAN PULJU")),
-                        cleanresults_MIT(results_2022, key_2022, 2022, "Governor", c("TINA KOTEK", "CHRISTINE DRAZAN", "BETSY JOHNSON", "DONICE NOELLE SMITH", "R LEON NOBLE")))
+by_precinct <- rbind(cleanresults_VEST(results_2016, key_2016, "G16PRE", TOWN, WP_NAME, 2016, "President"),
+                        cleanresults_VEST(results_2018, key_2018, "G18USS", TOWN, WP_NAME, 2018, "U.S. Senate"),
+                        cleanresults_VEST(results_2018, key_2018, "G18GOV", TOWN, WP_NAME, 2018, "Governor"),
+                        cleanresults_VEST(results_2018, key_2018, "G18ATG", TOWN, WP_NAME, 2018, "Attorney General"),
+                        cleanresults_VEST(results_2018, key_2018, "G18SOC", TOWN, WP_NAME, 2018, "Secretary of the Commonwealth"),
+                        cleanresults_VEST(results_2018, key_2018, "G18TRE", TOWN, WP_NAME, 2018, "Treasurer"),
+                        cleanresults_VEST(results_2018, key_2018, "G18AUD", TOWN, WP_NAME, 2018, "Auditor"),
+                        cleanresults_VEST(results_2020, key_2020, "G20PRE", TOWN, WP_NAME, 2020, "President"),
+                        cleanresults_VEST(results_2020, key_2020, "G20USS", TOWN, WP_NAME, 2020, "U.S. Senate"),
+                        cleanresults_MIT(results_2022, key_2022, 2022, "Governor", c("HEALEY", "DIEHL", "REED")),
+                        cleanresults_MIT(results_2022, key_2022, 2022, "Attorney General", c("ANDREA JOY CAMPBELL", "JAMES R MCMAHON III")),
+                        cleanresults_MIT(results_2022, key_2022, 2022, "Secretary of State", c("WILLIAM FRANCIS GALVIN", "RAYLA CAMPBELL", "JUAN SANCHEZ")) %>% mutate(office = str_replace(office, "State", "the Commonwealth")),
+                        cleanresults_MIT(results_2022, key_2022, 2022, "Auditor", c("DIANA DIZOGLIO", "ANTHONY AMORE", "GLORIA A CABALLERO-ROCA", "DANIEL WERNER RIEK", "DOMINIC GIANNONE III")))
 
 
 # aggregate results by congressional district for all races
-by_cd_or <-cleanresults_bycd(by_precinct_or)
+by_cd <- cleanresults_bycd(by_precinct)
 
 
 # compute baseline by congressional district
-baseline_cd_or22 <- baseline_cd(by_cd_or, 2016, 2022, 1)
+baseline22_cd <- baseline_cd(by_cd, 2016, 2022, 1)
