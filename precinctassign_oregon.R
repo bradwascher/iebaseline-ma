@@ -1,279 +1,353 @@
 #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ###
-# Setup and startup---------------------------------------------------------------------
+# | setup and startup-------------------------------------------------------------------
 #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ###
-
-### About ###
+  
+#### #### #### #### #### #### #### ###
+# — about-----------------------------
+#### #### #### #### #### #### #### ###
+  
 # This script calculates by congressional district the results of every federal and statewide election in Oregon between 2016 and 2022.
-# It achieves this by merging each cycle's precinct-level election results with two assignment matrices:
-# One list pairs census blocks into congressional districts, while the other list pairs census blocks into voting precincts.
-# When the lists are combined with the 2016-2022 results, previous elections' precincts can quickly be assigned into new districts.
 # The 2016-2020 calculations were used in an article analyzing the electoral competitiveness of the map:
 # https://www.insideelections.com/news/article/oregon-redistricting-mostly-good-news-for-democrats
+  
 
-
-### Data Sources ###
+# data and sources:
 # U.S. Census Bureau: https://www.census.gov/cgi-bin/geo/shapefiles/index.php?year=2020&layergroup=Blocks+%282020%29
 # Oregon Secretary of State: https://sos.oregon.gov/elections/Pages/electionhistory-stats.aspx
 # Voting and Election Science Team: https://dataverse.harvard.edu/dataverse/electionscience
 # OpenElections: https://github.com/openelections/openelections-data-or
-
-
+  
+  
+# libraries 
 { 
   library(tidyverse) # install.packages("tidyverse")
   library(dataverse) # install.packages("dataverse")
-  library(readxl)    # install.packages("readxl")
   library(sf)        # install.packages("sf")
+  library(openxlsx)  # install.packages("openxlsx")
+  library(gsheet)    # install.packages("gsheet")
   library(modeest)   # install.packages("modeest")
 }
 
-options(scipen = 999)
-Sys.setenv("DATAVERSE_SERVER" = "dataverse.harvard.edu")
+  
+# useful settings
+options(scipen = 999) # ensures precinct names don't get converted to scientific notation 
+Sys.setenv("DATAVERSE_SERVER" = "dataverse.harvard.edu") # VEST files are hosted on the Dataverse
 pick_state = "OR"
 
 
 
 
 #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ###
-# create matrices that assign census blocks into precincts into districts --------------
+# | create functions--------------------------------------------------------------------
 #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ###
 
-# read in assignment matrix matching census blocks into congressional districts 
-key_cd_pct <- read.csv("block_assignment_files/match_block_district_all.csv", header=TRUE)
-names(key_cd_pct) <- c("censusblock","cd")
+#### #### #### #### #### #### #### ###
+# — functions to download results-----
+#### #### #### #### #### #### #### ###
 
-
-# create function to clean assignment matrix matching precincts into congressional districts
-getkeys <- function(x_dfresults) {
+# function to download results from VEST via Dataverse (2016, 2018, 2020)
+getresults_VEST <- function(cycle, doi, varname_county, varname_precinct) {
+  #get_file(paste0(tolower(pick_state),"_",cycle,".zip"), paste0("doi:",doi)) %>% writeBin(paste0(tolower(pick_state),"_",cycle,".zip"))
+  #unzip(paste0(tolower(pick_state),"_",cycle,".zip"), exdir = paste0("shapefile_",cycle))
+  #unlink(paste0(tolower(pick_state),"_",cycle,".zip"))
   
-  key <- x_dfresults %>%
+  shapefile <- rgdal::readOGR(dsn = paste0("shapefile_",cycle),
+                              layer = paste0(tolower(pick_state),"_",cycle))
+  results <- shapefile@data %>% mutate(county = str_remove({{varname_county}}, "^0+"),
+                                       precinct = str_remove({{varname_precinct}}, "^0+"),
+                                       countyprecinct = paste(county, precinct))
+}
+
+
+#### #### #### #### #### #### #### ###
+#— functions to create match keys-----
+#### #### #### #### #### #### #### ###
+
+# function to create block/precincts keys from VEST (2016, 2018, 2020)
+getkey_VEST <- function(x_blockassignments) {
+  key <- x_blockassignments %>%
     mutate(countyprecinct = as.factor((paste(str_remove(as.character(COUNTY), "^0+"), str_remove(as.character((PRECINCT)), "^0+"))))) %>%
     select(censusblock = GEOID20, countyprecinct) %>%
     distinct %>%
-    merge(key_cd_pct, by = "censusblock") %>%
+    merge(read.csv("block-assignments.csv", header=TRUE) %>% rename(censusblock = 1, cd = 2), by = "censusblock") %>%
     distinct(countyprecinct, cd)
   key %>%
     merge(as.data.frame(table(key$countyprecinct)) %>% rename(countyprecinct = Var1) %>% arrange(countyprecinct), by = "countyprecinct") %>%
     mutate(countyprecinct = as.factor(countyprecinct)) %>%
     select(countyprecinct, Freq, cd) %>%
     arrange(countyprecinct, Freq, cd)
-  
 }
 
-# apply function to get precinct-cd assignment matrices for cycles of interest
-key_2016 <- getkeys(read.csv("block_assignment_files/match_block_precinct_2016.csv", header=TRUE))
-
-key_2018 <- getkeys(read.csv("block_assignment_files/match_block_precinct_2018.csv", header=TRUE))
-
-key_2020 <- getkeys(read.csv("block_assignment_files/match_block_precinct_2020.csv", header=TRUE))
-
-
-# get precinct-cd assignment matrix for 2022
-key_2022 <- read.csv("https://raw.githubusercontent.com/openelections/openelections-data-or/master/2022/20221108__or__general__precinct.csv") %>%
-  mutate(countyprecinct = paste(county, precinct),
-         office = str_replace(office, "U.S.House", "U.S. House"),
-         office = str_replace(office, "U.S. House District 2", "U.S. House")) %>%
-  filter(office == "U.S. House") %>%
-  select(countyprecinct, cd = district) %>% distinct %>%
-  filter(cd != 0)
-
-
-
-
-#### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ###
-# read in election results by year------------------------------------------------------
-#### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ###
-
-# 2016 - from VEST
-# 2016: Read in precinct-level results from Dataverse and wrangle; Filter for each race
-get_file("or_2016.zip", "doi:10.7910/DVN/NH5S2I") %>% writeBin("block_assignment_files/or_2016.zip")
-unzip("block_assignment_files/or_2016.zip", exdir = "block_assignment_files/shapefile_2016")
-unlink("block_assignment_files/or_2016.zip")
-
-shapefile_2016 <- rgdal::readOGR(dsn = "block_assignment_files/shapefile_2016",
-                                 layer = paste0(tolower(pick_state),"_2016"))
-shapefile_2016_df <- shapefile_2016@data %>% mutate(countyprecinct = as.factor((paste(str_remove(as.character(COUNTY), "^0+"), str_remove(as.character((PRECINCT)), "^0+"),str_remove(as.character(NAME), "^0+")))))
-
-
-# 2018 - from VEST
-get_file("or_2018.zip", "doi:10.7910/DVN/UBKYRU") %>% writeBin("block_assignment_files/or_2018.zip")
-unzip("block_assignment_files/or_2018.zip", exdir = "block_assignment_files/shapefile_2018")
-unlink("block_assignment_files/or_2018.zip")
-
-shapefile_2018 <- rgdal::readOGR(dsn = "block_assignment_files/shapefile_2018",
-                                 layer = paste0(tolower(pick_state),"_2018"))
-shapefile_2018_df <- shapefile_2018@data %>% mutate(countyprecinct = as.factor((paste(str_remove(as.character(COUNTY), "^0+"), str_remove(as.character((PRECINCT)), "^0+"),str_remove(as.character(NAME), "^0+")))))
-
-
-# 2020 - from VEST
-get_file("or_2020.zip", "doi:10.7910/DVN/K7760H") %>% writeBin("block_assignment_files/or_2020.zip")
-unzip("block_assignment_files/or_2020.zip", exdir = "block_assignment_files/shapefile_2020")
-unlink("block_assignment_files/or_2020.zip")
-
-shapefile_2020 <- rgdal::readOGR(dsn = "block_assignment_files/shapefile_2020",
-                                 layer = paste0(tolower(pick_state),"_2020"))
-shapefile_2020_df <- shapefile_2020@data %>% mutate(countyprecinct = as.factor((paste(str_remove(as.character(COUNTY), "^0+"), str_remove(as.character((PRECINCT)), "^0+"))))) 
-
-
-# 2022 - from OpenElections
-results_2022 <- read.csv("https://raw.githubusercontent.com/openelections/openelections-data-or/master/2022/20221108__or__general__precinct.csv")
-
-
-
-
-#### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ###
-# create functions to clean precinct data-----------------------------------------------
-#### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ###
-
-# function to clean results from VEST
-cleanresults_vest <- function(x_dfresults, x_match, pick_gyyoff, pick_yyyy, pick_office){
-  
-  onlyoffice <- x_dfresults[ , grepl( pick_gyyoff , names(x_dfresults)) ] %>%
-    mutate_if(is.character,as.numeric)
-  
-  merge(x_match,
-        data.frame("countyprecinct" = x_dfresults %>% select(countyprecinct),
-                   "votes_dem" = onlyoffice[ , grepl(paste0(pick_gyyoff,"D"), names(onlyoffice)) ],
-                   "votes_rep" = onlyoffice[ , grepl(paste0(pick_gyyoff,"R"), names(onlyoffice)) ],
-                   "votes_total" = rowSums(onlyoffice))) %>%
-    rename(Precinct = countyprecinct) %>%
-    mutate(year = pick_yyyy, office = pick_office)
-  
-}
-
-
-# function to clean results from OpenElections
-cleanresults_openelections <- function(x_dfresults, pick_yyyy, pick_office, pick_candidates){
-  
-  x_dfresults %>%
-    filter(office ==  pick_office) %>%
-    mutate(countyprecinct = paste(county, precinct),
-           votes = as.numeric(votes)) %>%
-    merge(key_2022, by = "countyprecinct") %>%
-    select(countyprecinct, cd, office, candidate, votes) %>%
-    replace(is.na(.), 0) %>% distinct %>%
-    filter(candidate %in% pick_candidates) %>%
-    mutate(recodevote = ifelse(candidate == pick_candidates[1], "votes_dem",
-                               ifelse(candidate == pick_candidates[2], "votes_rep", "votes_other"))) %>%
-    select(countyprecinct, cd, office, recodevote,votes) %>%
-    group_by(countyprecinct, cd, office, recodevote) %>%
+# function to create precinct/cd keys from MIT (2022)
+getkey_MIT2022 <- function(x_results) {
+  # clean results by house
+  results_22house <- x_results %>%
+    filter(office ==  "US HOUSE" | office == "REPRESENTATIVE IN CONGRESS",
+           precinct != "COUNTY TOTAL") %>%
+    mutate(countyprecinct = paste(county_name, precinct),
+           votes = str_replace(votes, "\\*", "0"),
+           votes = as.numeric(votes),
+           party_simplified = ifelse(party_detailed == "DEMOCRATIC-FARMER-LABOR" & party_simplified == "OTHER", "DEMOCRAT", party_simplified),
+           party_detailed = str_replace(party_detailed, "DEMOCRATIC-FARMER-LABOR", "DEMOCRAT")) %>% 
+    select(countyprecinct, cd = district, office, party_simplified, candidate, votes) %>%
+    mutate(party_recode = ifelse(party_simplified %in% "", candidate, party_simplified),
+           party = ifelse(party_recode == "DEMOCRAT", "votes_dem",
+                   ifelse(party_recode == "REPUBLICAN", "votes_rep", "votes_other"))) %>%
+    replace(is.na(.), "votes_other") %>%
+    select(countyprecinct, cd, office, party, votes) %>%
+    group_by(countyprecinct, cd, office, party) %>%
     summarize(votes = sum(votes)) %>%
-    pivot_wider(names_from = "recodevote", values_from = "votes") %>%
+    pivot_wider(names_from = "party", values_from = "votes") %>%
     replace(is.na(.), 0) %>%
-    mutate(Freq = 1,
-           year = pick_yyyy,
-           votes_total = votes_dem + votes_rep + votes_other) %>%
-    select(Precinct = countyprecinct, Freq, cd, votes_dem, votes_rep, votes_total, year, office)
-  
+    drop_na(cd) %>%
+    mutate(cd = as.numeric(cd),
+           cycle = 2022,
+           office = "US HOUSE",
+           votes_total =  across(starts_with("votes_")) %>% rowSums) %>%
+    select(countyprecinct, cd, votes_dem, votes_rep, votes_total, cycle, office)
+  # see which precincts were split between districts (and in which proportions they were split)
+  precincts_split <- results_22house %>%
+    merge(as.data.frame(table(results_22house$countyprecinct)) %>% rename(countyprecinct = Var1) %>% arrange(countyprecinct), by = "countyprecinct") %>%
+    filter(Freq > 1) %>% select(-Freq)
+  precincts_split <- precincts_split %>%
+    merge(precincts_split %>%
+            group_by(countyprecinct) %>%
+            summarize(sum_dem = sum(votes_dem),
+                      sum_rep = sum(votes_rep),
+                      sum_total = sum(votes_total))) %>%
+    mutate(cd = as.numeric(cd),
+           split = 1,
+           precinctshare_dem = votes_dem / sum_dem,
+           precinctshare_rep = votes_rep / sum_rep,
+           precinctshare_total = votes_total / sum_total) %>%
+    replace(is.na(.), 0) %>%
+    select(countyprecinct, cd, split, precinctshare_dem, precinctshare_rep, precinctshare_total)
+  # identify precincts that were split with errors
+  precincts_problematic <- precincts_split %>%
+    group_by(countyprecinct) %>%
+    summarize(total_dem = sum(precinctshare_dem),
+              total_rep = sum(precinctshare_rep),
+              total_total = sum(precinctshare_total)) %>%
+    filter(total_dem < 1 | total_rep < 1 | total_total < 1) %>%
+    mutate(problematic = ifelse(total_total < 1, "ISSUE TOTAL",
+                         ifelse(total_dem < 1 & total_total < 1, "ISSUE TOTAL",       
+                         ifelse(total_rep < 1 & total_total < 1, "ISSUE TOTAL",       
+                         ifelse(total_rep < 1 & total_rep < 1, "ISSUE TOTAL",
+                         ifelse(total_dem < 1, "ISSUE D",
+                         ifelse(total_rep < 1, "ISSUE R", NA))))))) %>%
+    select(countyprecinct, problematic) %>%
+    merge(precincts_split) %>%
+    mutate(precinctshare_dem = ifelse(problematic == "ISSUE D", precinctshare_rep, ifelse(problematic == "ISSUE TOTAL", 0.5, precinctshare_dem)),
+           precinctshare_rep = ifelse(problematic == "ISSUE R", precinctshare_dem, ifelse(problematic == "ISSUE TOTAL", 0.5, precinctshare_rep)),
+           precinctshare_total = ifelse(problematic == "ISSUE TOTAL", 0.5, precinctshare_total)) %>%
+    select(-problematic)
+  # add together to make a key
+  rbind(
+        x_results %>%
+          mutate(countyprecinct = paste(county_name, precinct)) %>%
+          filter(office == "US HOUSE" | office == "REPRESENTATIVE IN CONGRESS", precinct != "COUNTY TOTAL") %>%
+          select(countyprecinct, cd = district) %>% distinct %>%
+          filter(!(countyprecinct %in% precincts_split$countyprecinct)) %>%
+          mutate(cd = as.numeric(cd),
+                 split = 0,
+                 precinctshare_dem = 1, 
+                 precinctshare_rep = 1,
+                 precinctshare_total = 1),
+        precincts_split %>% filter(!(countyprecinct %in% precincts_problematic$countyprecinct)),
+        precincts_problematic) %>%
+    arrange(countyprecinct)
 }
 
 
+#### #### #### #### #### #### #### ###
+#— functions to tidy precinct data----
+#### #### #### #### #### #### #### ###
+
+# function to clean precinct data from VEST (2016, 2018, 2020)
+cleanresults_VEST <- function(x_results, x_key, varname_gyyoff, varname_county, varname_precinct, pick_yyyy, pick_office){
+  # filter results for contest of interest
+  onlyoffice <- x_results[ , grepl(varname_gyyoff, names(x_results)) ] %>%
+    mutate_if(is.character,as.numeric)
+  # reshape results and merge with key
+  data.frame("county" = x_results %>% select(county = {{varname_county}}) %>% mutate(county = str_remove(county, "^0+")),
+             "precinct" = x_results %>% select(precinct = {{varname_precinct}}) %>% mutate(precinct = str_remove(precinct, "^0+")),
+             "votes_dem" = onlyoffice[ , grepl(paste0(varname_gyyoff,"D"), names(onlyoffice)) ],
+             "votes_rep" = onlyoffice[ , grepl(paste0(varname_gyyoff,"R"), names(onlyoffice)) ],
+             "votes_total" = rowSums(onlyoffice)) %>%
+    mutate("countyprecinct" = paste(county, precinct),
+           cycle = pick_yyyy,
+           office = pick_office) %>%
+    merge(x_key) %>%
+    mutate(cd = paste0(pick_state,"-", str_pad(cd, 2, pad = "0")),
+           precinctshare_dem = 1 / Freq,
+           precinctshare_rep = 1 / Freq,
+           precinctshare_total = 1/ Freq) %>%
+    select(countyprecinct, county, precinct, cd, cycle, office, votes_dem, votes_rep, votes_total, precinctshare_dem, precinctshare_rep, precinctshare_total)
+}
+
+# function to clean precinct data from MIT (2022)
+cleanresults_MIT <- function(x_results, x_key, pick_yyyy, pick_office, pick_candidates){
+  # reshape raw results
+  precincts_all <- x_results %>%
+    mutate(office = str_replace(office, "US SENATE", "U.S. SENATE"), # rename office titles for consistency
+           office = ifelse(office == "U.S. SENATE" & special == TRUE, "U.S. SENATE (SPECIAL)", office),
+           office = str_replace(office, "SECRETARY OF THE STATE", "SECRETARY OF STATE"),
+           office = str_replace(office, "AUDITOR OF STATE", "AUDITOR"),
+           office = str_replace(office, "STATE AUDITOR", "AUDITOR"),
+           office = str_replace(office, "STATE TREASURER", "TREASURER"),
+           office = str_replace(office, "GENERAL TREASURER", "TREASURER"),
+           office = str_replace(office, "TREASURER OF STATE", "TREASURER"),
+           office = str_replace(office, "STATE ATTORNEY GENERAL", "ATTORNEY GENERAL"),
+           office = str_replace(office, "STATE CONTROLLER", "CONTROLLER"),
+           office = str_replace(office, "RAILROAD COMMISSIONER 1", "RAILROAD COMMISSIONER"),
+           office = str_replace(office, "JUSTICE OF THE SUPREME COURT PLACE 2", "SUPREME COURT JUSTICE, PLACE 2"),
+           office = str_replace(office, "JUSTICE OF THE SUPREME COURT PLACE 3", "SUPREME COURT JUSTICE, PLACE 3"),
+           office = str_replace(office, "JUSTICE OF THE SUPREME COURT PLACE 5", "SUPREME COURT JUSTICE, PLACE 5"),
+           office = str_replace(office, "JUSTICE OF THE SUPREME COURT PLACE 9", "SUPREME COURT JUSTICE, PLACE 9"),
+           office = str_replace(office, "ASSOCIATE JUSTICE OF THE SUPREME COURT, PLACE 5", "SUPREME COURT JUSTICE, PLACE 5"),
+           office = str_replace(office, "JUSTICE OF THE SUPREME COURT POSITION 2", "SUPREME COURT JUSTICE, PLACE 2"),
+           office = str_replace(office, "JUSTICE OF THE SUPREME COURT", "SUPREME COURT JUSTICE, PLACE 1"),
+           office = str_replace(office, "JUDGE OF THE COURT OF APPEALS PLACE 1", "COURT OF APPEALS JUDGE, PLACE 1"),
+           office = str_replace(office, "JUDGE OF THE COURT OF APPEALS PLACE 2", "COURT OF APPEALS JUDGE, PLACE 2"),
+           office = str_replace(office, "JUDGE OF THE COURT OF APPEALS POSITION 1", "COURT OF APPEALS JUDGE, PLACE 1"),
+           office = str_replace(office, "JUDGE OF THE COURT OF APPEALS POSITION 2", "COURT OF APPEALS JUDGE, PLACE 2"),
+           office = str_replace(office, "COURT OF CRIMINAL APPEALS PLACE 5", "COURT OF CRIMINAL APPEALS JUDGE, PLACE 5"),
+           office = str_replace(office, "COURT OF CRIMINAL APPEALS PLACE 6", "COURT OF CRIMINAL APPEALS JUDGE, PLACE 6"),
+           party_detailed = str_replace(party_detailed, "DEMOCRATIC-FARMER-LABOR", "DEMOCRAT")) %>%
+    filter(office == toupper(pick_office), # filter to the specified election
+           candidate %in% pick_candidates) %>%
+    mutate(countyprecinct = paste(county_name, precinct), # countyprecinct is a more reliable unique identifier for each precinct
+           votes = str_replace(votes, "\\*", "0"),
+           votes = as.numeric(votes),
+           party = ifelse(candidate == pick_candidates[1], "votes_dem",
+                          ifelse(candidate == pick_candidates[2], "votes_rep", "votes_other"))) %>%
+    select(countyprecinct, county_name, precinct, party, votes) %>%
+    group_by(countyprecinct, county_name, precinct, party) %>% # pivot results to long tidy format 
+    summarize(votes = sum(votes)) %>%
+    pivot_wider(names_from = "party", values_from = "votes") %>%
+    replace(is.na(.), 0) %>%
+    mutate(cycle = pick_yyyy, # add other variables of interest
+           office = pick_office,
+           votes_total = across(starts_with("votes_")) %>% rowSums) %>%
+    select(countyprecinct, county = county_name, precinct, votes_dem, votes_rep, votes_total, cycle, office)
+  # merge with key
+  precincts_merged <- merge(precincts_all, x_key, by = "countyprecinct") %>% 
+    drop_na(cd) %>%
+    select(countyprecinct, county, precinct, cd, cycle, office, votes_dem, votes_rep, votes_total, precinctshare_dem, precinctshare_rep, precinctshare_total)
+  # calculate vote totals for split precincts
+  precincts_split <- precincts_merged %>% 
+    filter(precinct %in% x_key[x_key$split == 1, ]) %>%
+    mutate(votes_dem_adj = votes_dem * precinctshare_dem,
+           votes_rep_adj = votes_rep * precinctshare_rep,
+           votes_total_adj = votes_total * precinctshare_total) %>%
+    mutate(problematic = ifelse(votes_total_adj >= votes_dem_adj + votes_rep_adj, FALSE,
+                                ifelse(votes_total_adj < votes_dem_adj + votes_rep_adj, TRUE, NA))) %>%
+    mutate(votes_total_scaled = ifelse(votes_total_adj >= votes_dem_adj + votes_rep_adj, votes_total_adj,
+                                       ifelse(votes_total_adj < votes_dem_adj + votes_rep_adj, votes_dem_adj + votes_rep_adj, NA)))
+  precincts_split <- merge(precincts_split,
+                           precincts_split %>%
+                             select(countyprecinct, county, precinct, votes_total_scaled) %>%
+                             group_by(countyprecinct, county, precinct) %>%
+                             summarize(votes_total_sumscale = sum(votes_total_scaled))) %>%
+    mutate(diff = votes_total - votes_total_sumscale) %>%
+    mutate(votes_total_adjusted = ifelse(problematic == TRUE, votes_total_scaled, votes_total_scaled + diff),
+           precinctshare_totalADJUST = votes_total_adjusted/votes_total) %>%
+    replace(is.na(.), 0) %>%
+    select(-precinctshare_total) %>% 
+    select(countyprecinct, county, precinct, cd, cycle, office, votes_dem, votes_rep, votes_total, precinctshare_dem, precinctshare_rep, precinctshare_total = precinctshare_totalADJUST)
+  # identify precincts that cast votes in the statewide election but not the House race -- these were dropped in the merge
+  precincts_dropped <- precincts_all %>% filter(countyprecinct %in% setdiff(precincts_all$countyprecinct, x_key$countyprecinct)) %>%
+    left_join(precincts_merged %>% distinct(county, cd) %>% group_by(county) %>% summarize(cd = mfv(cd))) %>%
+    mutate(precinctshare_dem = 1, precinctshare_rep = 1, precinctshare_total = 1) %>%
+    select(countyprecinct, county, precinct, cd, cycle, office, votes_dem, votes_rep, votes_total, precinctshare_dem, precinctshare_rep, precinctshare_total)
+  # put it all together
+  rbind(precincts_merged %>% filter(!(countyprecinct %in% x_key[x_key$split == 1, ])),
+        precincts_split,
+        precincts_dropped) %>%
+    mutate(cd = paste0(pick_state,"-", str_pad(cd, 2, pad = "0"))) %>%
+    arrange(countyprecinct)
+}
 
 
-#### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ###
-# apply functions to clean precinct data for all years and offices----------------------
-#### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ###
+#### #### #### #### #### #### #### ###
+#— functions to aggregate data--------
+#### #### #### #### #### #### #### ###
 
-by_precinct_all <- rbind(cleanresults_vest(shapefile_2016_df, key_2016, "G16PRE", 2016, "President"),
-                         cleanresults_vest(shapefile_2016_df, key_2016, "G16USS", 2016, "U.S. Senate"),
-                         cleanresults_vest(shapefile_2016_df, key_2016, "G16GOV", 2016, "Governor (Special)"),
-                         cleanresults_vest(shapefile_2016_df, key_2016, "G16ATG", 2016, "Attorney General"),
-                         cleanresults_vest(shapefile_2016_df, key_2016, "G16SOS", 2016, "Secretary of State"),
-                         cleanresults_vest(shapefile_2016_df, key_2016, "G16TRE", 2016, "Treasurer"),
-                         cleanresults_vest(shapefile_2018_df, key_2018, "G18GOV", 2018, "Governor"),
-                         cleanresults_vest(shapefile_2020_df, key_2020, "G20PRE", 2020, "President"),
-                         cleanresults_vest(shapefile_2020_df, key_2020, "G20USS", 2020, "U.S. Senate"),
-                         cleanresults_vest(shapefile_2020_df, key_2020, "G20ATG", 2020, "Attorney General"),
-                         cleanresults_vest(shapefile_2020_df, key_2020, "G20SOS", 2020, "Secretary of State"),
-                         cleanresults_vest(shapefile_2020_df, key_2020, "G20TRE", 2020, "Treasurer"),
-                         cleanresults_openelections(results_2022, 2022, "U.S. Senate", c("Ron Wyden", "Jo Rae Perkins", "Chris Henry", "Dan Pulju")),
-                         cleanresults_openelections(results_2022, 2022, "Governor", c("Tina Kotek", "Christine Drazan", "Betsy Johnson", "Donice Noelle Smith", "R Leon Nobel"))
-)
-
-
-
-
-
-#### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ###
-# create function that sums precinct data to get results by congressional district------
-#### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ###
-
-cleanresults_bycd <- function (pick_cycle, pick_office) {
-  by_precinct_all %>%
-    filter(year == pick_cycle, office == pick_office) %>%
-    mutate(votes_dem_adj = votes_dem / Freq,
-           votes_rep_adj = votes_rep / Freq,
-           votes_total_adj = votes_total / Freq) %>%
-    group_by(cd) %>%
-    summarize(cycle = pick_cycle,
-              office = pick_office,
-              votes_dem = sum(votes_dem_adj),
+# function to sum precinct data up to the congressional district level
+cleanresults_bycd <- function (x_results, pick_yyyy, pick_office) {
+  x_results %>%
+    mutate(state = pick_state,
+           votes_dem_adj = votes_dem * precinctshare_dem,
+           votes_rep_adj = votes_rep * precinctshare_rep,
+           votes_total_adj = votes_total * precinctshare_total) %>%
+    group_by(state, cd, cycle, office) %>%
+    summarize(votes_dem = sum(votes_dem_adj),
               votes_rep = sum(votes_rep_adj),
-              votes_total = sum(votes_total_adj),
-              percent_dem = votes_dem / votes_total,
-              percent_rep = votes_rep / votes_total,
-              dem_margin = percent_dem - percent_rep) 
-  
+              votes_total = sum(votes_total_adj)) %>%
+    mutate(percent_dem = votes_dem / votes_total,
+           percent_rep = votes_rep / votes_total,
+           dem_margin = percent_dem - percent_rep)
+}
+
+# function to calculate Baseline scores by cd
+baseline_cd <- function (x, year_start, year_end, trim) {
+  x %>%
+    filter(cycle >= year_start & cycle <= year_end) %>%
+    group_by(cd) %>%
+    dplyr::summarize(nraces = n(),
+                     baseline_dem = mean(percent_dem, trim = trim/nraces),
+                     baseline_rep = mean(percent_rep, trim = trim/nraces),
+                     baseline_margin = baseline_dem - baseline_rep) %>%
+    select(-nraces)
 }
 
 
 
 
-
 #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ###
-# apply function to get results for all races by congressional district-----------------
-#### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ###
-
-by_cd_all <- rbind(cleanresults_bycd(2016, "President"),
-                   cleanresults_bycd(2016, "U.S. Senate"),
-                   cleanresults_bycd(2016, "Governor (Special)"),
-                   cleanresults_bycd(2016, "Attorney General"),
-                   cleanresults_bycd(2016, "Secretary of State"),
-                   cleanresults_bycd(2016, "Treasurer"),
-                   cleanresults_bycd(2018, "Governor"),
-                   cleanresults_bycd(2020, "President"),
-                   cleanresults_bycd(2020, "U.S. Senate"),
-                   cleanresults_bycd(2020, "Attorney General"),
-                   cleanresults_bycd(2020, "Secretary of State"),
-                   cleanresults_bycd(2020, "Treasurer"),
-                   cleanresults_bycd(2022, "U.S. Senate"),
-                   cleanresults_bycd(2022, "Governor")
-                   
-)
-
-
-#write.csv(by_cd_all, paste0(pick_state,"_by_cd_all.csv"))
-
-
-
-
-#### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ###
-# viewing output------------------------------------------------------------------------
+# | collect and clean precinct results--------------------------------------------------
 #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### ###
 
-# average of all results
-by_cd_all %>%
-  group_by(cd) %>%
-  summarize(mean_dem_percent = mean(percent_dem),
-            mean_rep_percent = mean(percent_rep),
-            dem_margin = mean_dem_percent- mean_rep_percent) %>%
-  print(n = Inf)
+# read in election results: VEST (2016, 2018, 2020); MIT (2022)
+results_2016 <- getresults_VEST(cycle = 2016, doi = "10.7910/DVN/NH5S2I", COUNTY, PRECINCT)
+
+results_2018 <- getresults_VEST(cycle = 2018, doi = "10.7910/DVN/UBKYRU", COUNTY, PRECINCT)
+
+results_2020 <- getresults_VEST(cycle = 2020, doi = "10.7910/DVN/K7760H", COUNTY, PRECINCT)
+
+temp <- tempfile()
+download.file("https://github.com/MEDSL/2022-elections-official/raw/main/individual_states/2022-or-local-precinct-general.zip", temp)
+results_2022 <- read_csv(unz(temp, "or22_clean.csv"))
+unlink(temp)
 
 
-# just 2020 election results 
-bidentrump2020 <- by_cd_all %>%
-  filter(cycle == 2020,
-         office == "President") %>% 
-  group_by(cd) %>%
-  summarize(mean_dem_percent = mean(percent_dem),
-            mean_rep_percent = mean(percent_rep),
-            dem_margin = mean_dem_percent- mean_rep_percent)
-bidentrump2020
+# create keys that match census blocks into precincts
+key_2016 <- getkey_VEST(read.csv("Match Block Precinct 2016.csv", header=TRUE))
 
-# number of Biden districts
-bidentrump2020[bidentrump2020$dem_margin > 0, ] %>% nrow()
+key_2018 <- getkey_VEST(read.csv("Match Block Precinct 2018.csv", header=TRUE))
 
-# number of Trump districts
-bidentrump2020[bidentrump2020$dem_margin < 0, ] %>% nrow()
+key_2020 <- getkey_VEST(read.csv("Match Block Precinct 2020.csv", header=TRUE))
 
-# number of districts within 10 points
-bidentrump2020[bidentrump2020$dem_margin > -0.1 & bidentrump2020$dem_margin < 0.1, ] %>% nrow()
+key_2022 <- getkey_MIT2022(results_2022)
+
+
+# clean precinct data for all years and offices
+by_precinct_or <- rbind(cleanresults_VEST(results_2016, key_2016, "G16PRE", COUNTY, PRECINCT, 2016, "President"),
+                        cleanresults_VEST(results_2016, key_2016, "G16USS", COUNTY, PRECINCT, 2016, "U.S. Senate"),
+                        cleanresults_VEST(results_2016, key_2016, "G16GOV", COUNTY, PRECINCT, 2016, "Governor (Special)"),
+                        cleanresults_VEST(results_2016, key_2016, "G16ATG", COUNTY, PRECINCT, 2016, "Attorney General"),
+                        cleanresults_VEST(results_2016, key_2016, "G16SOS", COUNTY, PRECINCT, 2016, "Secretary of State"),
+                        cleanresults_VEST(results_2016, key_2016, "G16TRE", COUNTY, PRECINCT, 2016, "Treasurer"),
+                        cleanresults_VEST(results_2018, key_2018, "G18GOV", COUNTY, PRECINCT, 2018, "Governor"),
+                        cleanresults_VEST(results_2020, key_2020, "G20PRE", COUNTY, PRECINCT, 2020, "President"),
+                        cleanresults_VEST(results_2020, key_2020, "G20USS", COUNTY, PRECINCT, 2020, "U.S. Senate"),
+                        cleanresults_VEST(results_2020, key_2020, "G20ATG", COUNTY, PRECINCT, 2020, "Attorney General"),
+                        cleanresults_VEST(results_2020, key_2020, "G20SOS", COUNTY, PRECINCT, 2020, "Secretary of State"),
+                        cleanresults_VEST(results_2020, key_2020, "G20TRE", COUNTY, PRECINCT, 2020, "Treasurer"),
+                        cleanresults_MIT(results_2022, key_2022, 2022, "U.S. Senate", c("RON WYDEN", "JO RAE PERKINS", "CHRIS HENRY", "DAN PULJU")),
+                        cleanresults_MIT(results_2022, key_2022, 2022, "Governor", c("TINA KOTEK", "CHRISTINE DRAZAN", "BETSY JOHNSON", "DONICE NOELLE SMITH", "R LEON NOBLE")))
+
+
+# aggregate results by congressional district for all races
+by_cd_or <-cleanresults_bycd(by_precinct_or)
+baseline_cd_or22 <- baseline_cd(by_cd_or, 2016, 2022, 1)
